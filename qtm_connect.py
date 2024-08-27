@@ -13,7 +13,7 @@ ser = serial.Serial('/dev/ttyUSB0', 115200) #function for establishing serial co
 
 QTM_FILE = pkg_resources.resource_filename("qtm", "data/demo.qtm") 
 
-# QTM_FILE = "C:\\Users\\Lenovo\\OneDrive\\Desktop\\QTM_Python_SDK\\qualisys_python_sdk-2.1.0\\qtm_rt\\data\\mzdrone0039.qtm"
+#QTM_FILE = "C:\\Users\\LenttyUSB0ovo\\OneDrive\\Desktop\\QTM_Python_SDK\\qualisys_python_sdk-2.1.0\\qtm_rt\\data\\mzdrone0039.qtm"
 
 projection = pyproj.Proj(proj='utm', zone=10, ellps='WGS84')
 
@@ -32,11 +32,11 @@ async def main(): # for connecting to QTM
     
 
     # Connect to qtm
-    connection = await qtm.connect("149.201.162.184")
+    connection = await qtm.connect("149.201.162.82")
 
     # Connection failed?
     if connection is None:
-        print("Failed to connect")
+        print("Failed to connect") 
         return
 
     # Take control of qtm, context manager will automatically release control after scope end
@@ -68,7 +68,6 @@ async def main(): # for connecting to QTM
             )
         )
         # ser.write(b'helloooooooooooooooooo')
-
         if wanted_body is not None and wanted_body in body_index:
             # Extract one specific body
             wanted_index = body_index[wanted_body]
@@ -80,15 +79,14 @@ async def main(): # for connecting to QTM
 
 
 
+
         else:
             # Print all bodiesab
             for position, rotation in bodies:
-                print("Pos: {} - Rot: {}".format(position, rotation))
-                print(body_index)
-                data_packet = struct.pack('<3f', position[0], position[1], position[2]) #converts a integer or float into binary string
-                #unpack_data_packet = struct.unpack('f',data_packet)
-                #data_packet = position[1]
+                print("{} - Pos: {} - Rot: {}".format(wanted_body, position, rotation))
+            #for index, body in enumerate(xml.findall("*/Body/Name")):
                 #number = 000
+                data_packet = struct.pack('<3f', position[0], position[1], position[2]) #convert a floating point value into 
                 ser.write(data_packet)
                 print(data_packet)
                 #print(unpack_data_packet)
@@ -99,7 +97,7 @@ async def main(): # for connecting to QTM
   
 
     # Wait asynchronously 5 seconds
-    await asyncio.sleep(5)
+    await asyncio.sleep(20)
 
     # Stop streaming
     await connection.stream_frames_stop()
