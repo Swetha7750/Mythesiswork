@@ -36,6 +36,13 @@ static const char *TAG = "uart_events";
 #define RD_BUF_SIZE (BUF_SIZE)
 static QueueHandle_t uart0_queue;
 
+
+typedef struct {
+    float pos0;
+    float pos1;
+    float pos2;
+}Floatstruct;
+
 static void uart_event_task(void *pvParameters)
 {
     uart_event_t event;
@@ -48,14 +55,35 @@ static void uart_event_task(void *pvParameters)
             ESP_LOGI(TAG, "uart[%d] event:", EX_UART_NUM);
             switch (event.type) {
             //Event of UART receving data
-            /*We'd better handler data event fast, there would be much more data events than
+            /*We'd better handler data event fast, there would be much more data events tha
             other types of events. If we take too much time on data event, the queue might
             be full.*/
             case UART_DATA:
                 ESP_LOGI(TAG, "[UART DATA]: %d", event.size);
                 uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
                 ESP_LOGI(TAG, "[DATA EVT]:");
+                if(event.size == sizeof(Floatstruct)){
+                    Floatstruct *received_struct = (Floatstruct *)dtmp;
+                    ESP_LOGI(TAG, "NO DATA");
+
+                
+                }else{
+                    
+                    //ESP_LOGI(TAG, "helo whats up dude : %d", sizeof(Floatstruct));
+                    Floatstruct *received_struct = (Floatstruct *)dtmp;
+                    ESP_LOGI(TAG, "Received struct data: ");
+                    ESP_LOGI(TAG, "pos0: %f", received_struct->pos0);
+                    ESP_LOGI(TAG, "pos1: %f", received_struct->pos1);
+                    ESP_LOGI(TAG, "pos2: %f", received_struct->pos2);
+
+
+                    
+                }
+
+
+
                 uart_write_bytes(EX_UART_NUM, (const char*) dtmp, event.size);
+                
                 break;
             //Event of HW FIFO overflow detected
             case UART_FIFO_OVF:
