@@ -1,0 +1,189 @@
+"""
+    Streaming 6Dof from QTM
+"""
+
+import asyncio #asynchronous programming 
+import xml.etree.ElementTree as ET # parsing XML data which will be used in our code as ET
+import pkg_resources #to locate the resources with the package
+import struct
+import qtm #this file faciliates the communication to QTM
+import math
+
+import socket
+import json
+import time
+
+
+
+# Definitions
+wanted_body = "testboxx"
+
+
+
+# Define the UDP address and port
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # IPv4, UDP
+out_addr = ("127.0.0.1", 25100 )  # Replace port number if necessary     ADDRESS AND THE PORT 
+RADIUS_OF_EARTH = 6371000.0  # Radius of Earth in meters
+orthometric_height = 18.893
+
+# import serial 
+# ser = serial.Serial('/dev/ttyUSB0', 115200) #function for establishing serial connt
+
+QTM_FILE = pkg_resources.resource_filename("qtm", "data/demo.qtm") 
+
+#QTM_FILE = "C:\\Users\\LenttyUSB0ovo\\OneDrive\\Desktop\\QTM_Python_SDK\\qualisys_python_sdk-2.1.0\\qtm_rt\\data\\mzdrone0039.qtm"
+
+#projection = pyproj.Proj(proj='utm', zone=10, ellps='WGS84')
+
+def create_body_index(xml_string):
+    """ Extract a name to index dictionary from 6dof settings xml """
+    xml = ET.fromstring(xml_string)
+
+    body_to_index = {}
+    for index, body in enumerate(xml.findall("*/Body/Name")):
+        body_to_index[body.text.strip()] = index
+
+    return body_to_index
+
+
+async def main(): # for connecting to QTM 
+    
+
+    if wanted_body is None:
+        print("Define 'wanted_body' first")
+        return
+
+    # Connect to qtm
+    connection = await qtm.connect("192.168.252.1")
+
+    # Connection failed?
+    if connection is None:
+        print("Failed to connect") 
+        return
+
+    # Take control of qtm, context manager will automatically release control after scope end
+    async with qtm.TakeControl(connection, "password"):
+
+        realtime = True
+
+        if realtime:
+            # Start new realtime
+            await connection.new()
+        else:
+            # Load qtm file
+            await connection.load(QTM_FILE)
+
+            # start rtfromfile
+            await connection.start(rtfromfile=True)
+
+    # Get 6dof settings from qtm
+    xml_string = await connection.get_parameters(parameters=["6d"])
+    body_index = create_body_index(xml_string)
+
+
+
+    def on_packet(packet):
+        info, bodies = packet.get_6d()
+
+        if wanted_body in body_index:
+            # Extract one specific body
+            wanted_index = body_index[wanted_body]
+            if math.isnan(bodies[wanted_index][0].x): return
+
+            position, rotation = bodies[wanted_index]
+        
+            print("___________")
+           
+            XX = (round(position[0],5))/1000
+            YY = (round(position[1],5))/1000
+            ZZ= round(position[2],5)
+
+            print(XX)
+            print(YY)
+            #origin_latitude_rad = math.radians(origin_latitude)
+
+            # convert origin latitude for calculatiopn
+            latitude_0 = 50.764905# degrees
+            longitude_0 = 6.07875  # degrees
+            latitude_0_rad = math.radians(latitude_0)
+
+            # Latitude calculation
+            Latitude = latitude_0 + (YY / RADIUS_OF_EARTH) * (180 / math.pi)
+
+            # Longitude calculation (accounting for Earth's curvature at given latitude)
+            Longitude = longitude_0 + (XX / (RADIUS_OF_EARTH * math.cos(latitude_0_rad))) * (180 / math.pi)
+            rounded_lat = round(Latitude, 6) 
+            #converted_latitude = int(str(rounded_lat).replace('.', '')[:9])
+            rounded_long =   round(Longitude, 6)
+            #converted_longitude = int(str(rounded_long).replace('.', '')[:9])
+            
+            
+
+            
+           
+
+            time.sleep(0.05)  # Send data every 50ms (adjust as needed)
+            
+            #print(f"lat: {int(rounded_lat*1e7)} lon: {int(rounded_long*1e7)}")
+
+            # print( converted_longitude)
+            # GPS data in JSON format
+            data = {
+                'time_usec': 0,                      # Timestamp (microseconds)
+                'gps_id': 0,                         # GPS ID (e.g., 0 for single GPS)
+                'ignore_flags': 8,                   # Flags for ignored fields
+                'time_week_ms': 0,                   # GPS time (milliseconds from start of week)
+                'time_week': 0,                      # GPS week numbe
+                'fix_type': 3,                       # Fix type (e.g., 3 for 3D fix)
+                'lat': int(rounded_lat*1e7),                  # Latitude (degrees * 1E7)
+                'lon': int(rounded_long*1e7),                   # Longitude (degrees * 1E7)
+                'alt': ZZ,                           # Altitude (meters above mean sea level)
+                'hdop': 1,                           # Horizontal dilution of precision
+                'vdop': 1,                           # Vertical dilution of precision
+                'vn': 0,                             # Velocity north (m/s)
+                've': 0,                             # Velocity east (m/s)
+                'vd': 0,                             # Velocity down (m/s)
+                'speed_accuracy': 0.5,                 # Speed accuracy (m/s)
+                'horiz_accuracy': 1.0,                 # Horizontal accuracy (m)
+                'vert_accuracy': 1.5,                  # Vertical accuracy (m)
+                'satellites_visible': 9             # Number of visible satellites
+            }
+
+            # Convert to JSON and send via UDP
+            out_data = json.dumps(data)
+            print('Sending:', out_data)
+            s.sendto(out_data.encode(), out_addr)
+        
+            
+            
+            
+
+        else:
+            # Print all bodiesab
+            for position, rotation in bodies:
+                #print("{} - Pos: {} - Rot: {}".format(wanted_body, position, rotation))
+                
+                print("___________")
+
+
+    
+
+               
+    # Start streaming frames
+    await connection.stream_frames(components=["6d"], on_packet=on_packet)
+  
+
+    # Wait asynchronously 5 seconds
+    await asyncio.sleep(160)
+
+    # Stop streaming
+    await connection.stream_frames_stop()
+    # await connection.close()
+    
+    # ser.close()
+    
+
+
+if __name__ == "__main__":
+    # Run our asynchronous function until complete
+    asyncio.get_event_loop().run_until_complete(main())
